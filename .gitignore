@@ -1,0 +1,16 @@
+/node_modules
+/vendor
+/.idea
+Homestead.json
+Homestead.yaml
+.env
+!.env.example
+.gitattributes
+.htaccess
+.htpasswd
+.scss-lint.yml
+/config/database.php
+/.vagrant/
+/packages/Bestit/BestItDefaultThemePackage/node_modules/
+/composer.phar
+/composer.lock
