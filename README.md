@@ -39,3 +39,6 @@ protected $composerFile = __DIR__ . '/../../composer.json';
      
 ```
   
+### Activate the theme in your butterfly effect
+
+Please define the env var **BUTTERFLY_EFFECT_THEME_DEFAULT** with the name of your theme, so that it gets used.
