@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace ButterflyEffect\DefaultTheme;
 
-use Illuminate\Support\Facades\Validator as ValidatorFacade;
+use ButterflyEffect\DefaultTheme\Theme\Collection;
+use function dirname;
 use Illuminate\Support\ServiceProvider;
-use function GuzzleHttp\json_decode;
-use Illuminate\Validation\ValidationException;
-use Illuminate\Validation\Validator;
+use function public_path;
 use ReflectionClass;
 use ReflectionException;
 
@@ -18,12 +17,12 @@ use ReflectionException;
  * @author blange <lange@bestit-online.de>
  * @package ButterflyEffect\DefaultTheme
  */
-class ThemeProvider extends ServiceProvider
+abstract class ThemeProvider extends ServiceProvider
 {
     /**
      * @var string|void Where to find the composer file for this theme.
      */
-    protected $composerFile;
+    private $composerFile;
 
     /**
      * @var string|void The root folder for this theme.
@@ -31,9 +30,9 @@ class ThemeProvider extends ServiceProvider
     protected $themeRootFolder;
 
     /**
-     * @var array|void The json of the composer file.
+     * @var Theme The theme for this provider.
      */
-    private $composerJSON = null;
+    private $theme;
 
     /**
      * Boots the package.
@@ -46,72 +45,31 @@ class ThemeProvider extends ServiceProvider
     }
 
     /**
-     * Publishes the public files of this theme.
-     *
-     * @throws ValidationException
-     *
-     * @return void
-     */
-    public function publishPublicFiles(): void
-    {
-        $composerJSON = $this->getComposerJSON();
-        $assetFolder = $this->getThemeRootFolder() .
-            (@$composerJSON['extra']['butterfly-effect']['theme']['asset-folder'] ?: 'public');
-
-        $this->publishes(
-            [$assetFolder  => public_path('vendor/' . $this->app->make(Theme::class)->getName())],
-            'public'
-        );
-    }
-
-    /**
-     * Returns the data of the composer.json file from this package.
-     *
-     * @throws ValidationException
-     *
-     * @return array
-     */
-    protected function getComposerJSON(): array
-    {
-        if ($this->composerJSON === null) {
-            $this->composerJSON = [];
-
-            $this->loadComposerJSON();
-        }
-
-        return $this->composerJSON;
-    }
-
-    /**
-     * Loads the composer json data for this package.
-     *
-     * @throws ValidationException
-     *
-     * @return ThemeProvider
-     */
-    private function loadComposerJSON(): self
-    {
-        $composerJSON = json_decode(file_get_contents($this->getComposerFilePath()), true) ?: [];
-
-        $this->validateComposerScheme($composerJSON);
-
-        return $this->setComposerJSON($composerJSON);
-    }
-
-    /**
      * Returns the file path to the composer file.
      *
      * @return string
      */
-    protected function getComposerFilePath(): string
+    public function getComposerFile(): string
     {
         if (!$this->composerFile) {
-            $themeRootFolder = $this->getThemeRootFolder();
-
-            $this->composerFile = $themeRootFolder . 'composer.json';
+            $this->setComposerFile($this->loadComposerFile());
         }
 
         return $this->composerFile;
+    }
+
+    /**
+     * Returns the theme of this package.
+     *
+     * @return Theme
+     */
+    protected function getTheme(): Theme
+    {
+        if (!$this->theme) {
+            $this->setTheme($this->loadTheme());
+        }
+
+        return $this->theme;
     }
 
     /**
@@ -121,94 +79,80 @@ class ThemeProvider extends ServiceProvider
      *
      * @return string
      */
-    protected function getThemeRootFolder(): string
+    private function getThemeRootFolder(): string
     {
         if (!$this->themeRootFolder) {
             $reflection = new ReflectionClass($this);
 
-            $this->themeRootFolder = dirname($reflection->getFileName()) . '/../..' . DIRECTORY_SEPARATOR;
+            $this->themeRootFolder = realpath(dirname($reflection->getFileName()) . '/../..') . DIRECTORY_SEPARATOR;
         }
 
         return $this->themeRootFolder;
     }
 
     /**
-     * Validates the required json data.
-     *
-     * @param array $composerJSON
-     * @throws ValidationException
+     * @return string
+     * @throws ReflectionException
      */
-    private function validateComposerScheme(array $composerJSON): void
+    private function loadComposerFile(): string
     {
-        /** @var Validator $validator */
-        $validator = ValidatorFacade::make($composerJSON, [
-            'extra.butterfly-effect.theme' => 'required|array',
-            'extra.butterfly-effect.theme.css' => 'sometimes|array',
-            'extra.butterfly-effect.theme.js' => 'sometimes|array',
-            'name' => 'required'
-        ]);
+        $themeRootFolder = $this->getThemeRootFolder();
 
-        if (!$validator->passes()) {
-            throw new ValidationException($validator);
-        }
+        $composerFile = $themeRootFolder . 'composer.json';
+
+        return $composerFile;
     }
 
     /**
-     * Sets the json data of the composer file.
+     * Loads the theme by the bundles composer file.
      *
-     * @param array $composerJSON
-     *
-     * @return $this
+     * @return Theme
      */
-    private function setComposerJSON(array $composerJSON): self
+    private function loadTheme(): Theme
     {
-        $this->composerJSON = $composerJSON;
+        return $this->app->make(Collection::class)->addWithComposer($this->getComposerFile());
+    }
+
+    /**
+     * Publishes the public files of this theme.
+     *
+     * @return void
+     */
+    private function publishPublicFiles(): void
+    {
+        $theme = $this->getTheme();
+        $assetFolder = $this->getThemeRootFolder() . $theme->getAssetPath();
+
+        $this->publishes(
+            [$assetFolder => public_path('vendor/' . $theme->getName())],
+            'public'
+        );
+    }
+
+    /**
+     * Sets the theme for this package.
+     *
+     * @param Theme $theme
+     *
+     * @return ThemeProvider
+     */
+    private function setTheme(Theme $theme): ThemeProvider
+    {
+        $this->theme = $theme;
 
         return $this;
     }
 
     /**
-     * Registers the theme as a service.
+     * Sets the composer file.
      *
-     * @return void
+     * @param string $composerFile
+     * @return ThemeProvider
      */
-    public function register(): void
+    public function setComposerFile(string $composerFile): self
     {
-        // TODO: Add factory.
-        $this->app->singleton(Theme::class, function () {
-            $composerJSON = $this->getComposerJSON();
+        $this->composerFile = $composerFile;
 
-            $theme = new Theme($themeName = $composerJSON['name']);
-
-            $theme->setCssFiles(array_map(
-                $parseAssetPath = function (string $path) use ($themeName): string {
-                    if (strpos($path, './') === 0) {
-                        $path = url('vendor/' . $themeName . '/' . substr($path, 2));
-                    }
-
-                    return $path;
-                },
-                $composerJSON['extra']['butterfly-effect']['theme']['css'] ?? []
-            ));
-
-            $theme->setJsFiles(array_map(
-                $parseAssetPath,
-                $composerJSON['extra']['butterfly-effect']['theme']['js'] ?? []
-            ));
-
-            return $theme;
-        });
-    }
-
-    /**
-     * Returns the theme name.
-     *
-     * @throws ValidationException
-     *
-     * @return string
-     */
-    protected function getThemeName(): string
-    {
-        return $this->getComposerJSON()['name'];
+        return $this;
     }
 }
