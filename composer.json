@@ -17,9 +17,6 @@
     },
     "description": "The default theme as a boilerplate for the butterfly effect.",
     "extra": {
-        "branch-alias": {
-            "dev-master": "1.0-dev"
-        },
         "laravel": {
             "aliases": {
                 "Theme": "ButterflyEffect\\DefaultTheme\\Facades\\Theme"
